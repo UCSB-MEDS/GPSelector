@@ -4,6 +4,7 @@ library(tidyverse)
 library(lpSolve)
 library(rhandsontable)
 library(DT)
+library(shinydashboard)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -29,9 +30,17 @@ ui <- fluidPage(
         tabPanel("Point Allocation",
                  DT::dataTableOutput("prevIN")),
         tabPanel("Project Maximums",
+                 h3("The project maximums are set to a default of 5 members per group. You can modify these by directly writing into this table, just like Excel!"),
                  rHandsontableOutput("max", width = 300)),
         tabPanel("Solution",
+                 textOutput("total"),
                  DT::dataTableOutput("solution"))
+      ),
+      
+      tags$head(tags$style("#total{color: red;
+                                 font-size: 30px;
+                           font-face: bold;
+                           }")
       )
     )
   )
@@ -119,18 +128,20 @@ server <- function(input, output) {
     sol_out <- cbind(points()[c(1,2)], matrix(solution$solution, N, k, byrow = T))
     colnames(sol_out) <- colnames(points())
     
-    return(sol_out)
+    return(list(sol_out = sol_out, objval = solution$objval))
   })
   
-  output$solution <- DT::renderDataTable(DT::datatable(data = solution(),
-                                                       options = list(pageLength = N)))
+  output$total <- renderText(paste("Optimum solution yields a value of", solution()$objval))
+  
+  output$solution <- DT::renderDataTable(DT::datatable(data = solution()$sol_out,
+                                                       options = list(pageLength = 100)))
   
   output$down <- downloadHandler(
     filename = function() {
       paste0("Solution", ".csv")
     },
     content = function(file) {
-      write.csv(solution(), file, row.names = F)
+      write.csv(solution()$sol_out, file, row.names = F)
     }
   )
 }
