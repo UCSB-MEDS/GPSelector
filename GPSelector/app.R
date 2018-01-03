@@ -21,7 +21,9 @@ ui <- fluidPage(
                    label = "Run!"),
       p(),
       downloadButton(outputId = "down",
-                     label = "Download results")
+                     label = "Download results"),
+      p(),
+      p("This ShinyApp uses integer linear integer programming to match students to Group Projects, based on their point allocation strategy. ", a("The original code", href = "https://github.com/jcvdav/GPSelector/blob/master/SelectionCode.m"), "was written in MATLAB by Professor Christopher Costello. The new raw code behind the App can be found", a("here", href = "https://github.com/jcvdav/GPSelector"))
     ),
     
     # Show a plot of the generated distribution
@@ -32,12 +34,21 @@ ui <- fluidPage(
         tabPanel("Project Maximums",
                  h3("The project maximums are set to a default of 5 members per group. You can modify these by directly writing into this table, just like Excel!"),
                  rHandsontableOutput("max", width = 300)),
-        tabPanel("Solution",
+        tabPanel("Solution (matrix)",
                  textOutput("total"),
-                 DT::dataTableOutput("solution"))
+                 DT::dataTableOutput("solution")),
+        tabPanel("Solution (by groups)",
+                 textOutput("total2"),
+                 tableOutput("GP_table"))
       ),
       
       tags$head(tags$style("#total{color: red;
+                                 font-size: 30px;
+                           font-face: bold;
+                           }")
+                
+      ),
+      tags$head(tags$style("#total2{color: red;
                                  font-size: 30px;
                            font-face: bold;
                            }")
@@ -128,13 +139,36 @@ server <- function(input, output) {
     sol_out <- cbind(points()[c(1,2)], matrix(solution$solution, N, k, byrow = T))
     colnames(sol_out) <- colnames(points())
     
-    return(list(sol_out = sol_out, objval = solution$objval))
+    sol_by_gp <- sol_out %>% 
+      mutate(Name = paste(First.Name, Last.Name)) %>% 
+      select(Name, everything()) %>%
+      select(-c(First.Name, Last.Name)) %>% 
+      gather(Project, Value, -1) %>%
+      filter(Value > 0) %>%
+      select(Project, Name)
+
+    return(list(sol_out = sol_out,
+                objval = solution$objval,
+                sol_by_gp = sol_by_gp))
   })
   
+  ## Results for "results as matrix"
   output$total <- renderText(paste("Optimum solution yields a value of", solution()$objval))
-  
+
   output$solution <- DT::renderDataTable(DT::datatable(data = solution()$sol_out,
                                                        options = list(pageLength = 100)))
+  
+  ## Results for "resutls by group"
+  output$total2 <- renderText(paste("Optimum solution yields a value of", solution()$objval))
+  
+  output$GP_table <- function() {
+    
+    solution()$sol_by_gp %>%
+      knitr::kable("html") %>%
+      kable_styling("striped", full_width = F) %>% 
+      collapse_rows()
+  }
+  
   
   output$down <- downloadHandler(
     filename = function() {
