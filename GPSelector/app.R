@@ -1,10 +1,7 @@
 library(shiny)
-library(readxl)
-library(tidyverse)
-library(lpSolve)
-library(rhandsontable)
 library(DT)
 library(shinydashboard)
+library(rhandsontable)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -59,6 +56,10 @@ ui <- fluidPage(
 
 # Define server logic
 server <- function(input, output) {
+  library(knitr)
+  library(kableExtra)
+  library(tidyverse)
+  library(lpSolve)
   
   points <- reactive({
     inFile <- input$dataIN
