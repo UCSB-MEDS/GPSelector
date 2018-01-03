@@ -146,7 +146,8 @@ server <- function(input, output) {
       select(-c(First.Name, Last.Name)) %>% 
       gather(Project, Value, -1) %>%
       filter(Value > 0) %>%
-      select(Project, Name)
+      select(Project, Name) %>% 
+      arrange(Project)
 
     return(list(sol_out = sol_out,
                 objval = solution$objval,
@@ -163,7 +164,6 @@ server <- function(input, output) {
   output$total2 <- renderText(paste("Optimum solution yields a value of", solution()$objval))
   
   output$GP_table <- function() {
-    
     solution()$sol_by_gp %>%
       knitr::kable("html") %>%
       kable_styling("striped", full_width = F) %>% 
