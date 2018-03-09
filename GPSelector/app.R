@@ -2,82 +2,87 @@ library(shiny)
 library(DT)
 library(shinydashboard)
 library(rhandsontable)
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(lpSolve)
+
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+library(shiny)
 
 # Define UI for application that draws a histogram
-ui <- fluidPage(
-  
-  # Application title
-  titlePanel("Bren Group Project to Student Matcher"),
-  
-  # Sidebar with a slider input for number of bins 
-  sidebarLayout(
-    sidebarPanel(
+ui <- dashboardPage(
+  dashboardHeader(title = "GP-Student Matcher"),
+  dashboardSidebar(
+    sidebarMenu(
       fileInput(inputId = "dataIN",
                 label = "Upload your CSV file"),
+      menuItem("View data", tabName = "data", icon = icon("th"), startExpanded = T),
+      menuItem("Project maximums", tabName = "gp_max", icon = icon("database")),
       actionButton(inputId = "run",
                    label = "Run!"),
+      menuItem("Results (matrix)", tabName = "res_mat", icon = icon("users")),
+      menuItem("Results (by group)", tabName = "res_gp", icon = icon("users")),
+      wellPanel(shiny::fluidRow(valueBoxOutput(outputId = "total", width = 12))),
       p(),
-      downloadButton(outputId = "down",
-                     label = "Download results"),
+      downloadButton(outputId = "down_mat",
+                     label = "Download matrix"),
       p(),
-      p("This ShinyApp uses integer linear integer programming to match students to Group Projects, based on their point allocation strategy. ", a("The original code", href = "https://github.com/jcvdav/GPSelector/blob/master/SelectionCode.m"), "was written in MATLAB by Professor Christopher Costello. The new raw code behind the App can be found", a("here", href = "https://github.com/jcvdav/GPSelector"))
-    ),
-    
-    # Show a plot of the generated distribution
-    mainPanel(
-      tabsetPanel(
-        tabPanel("Point Allocation",
-                 DT::dataTableOutput("prevIN")),
-        tabPanel("Project Maximums",
-                 h3("The project maximums are set to a default of 5 members per group. You can modify these by directly writing into this table, just like Excel!"),
-                 rHandsontableOutput("max", width = 300)),
-        tabPanel("Solution (matrix)",
-                 textOutput("total"),
-                 DT::dataTableOutput("solution")),
-        tabPanel("Solution (by groups)",
-                 textOutput("total2"),
-                 tableOutput("GP_table"))
+      downloadButton(outputId = "down_gp",
+                     label = "Download grouped")
+    )
+  ),
+  dashboardBody(
+    tabItems(
+      # First tab content
+      tabItem(tabName = "data",
+              p("This ShinyApp uses integer linear integer programming to match students to Group Projects, based on their point allocation strategy. ", a("The original code", href = "https://github.com/jcvdav/GPSelector/blob/master/SelectionCode.m"), "was written in MATLAB by Professor Christopher Costello. The new raw code behind the App can be found", a("here", href = "https://github.com/jcvdav/GPSelector")),
+              h3("Point Allocation"),
+              DT::dataTableOutput("prevIN")
       ),
-      
-      tags$head(tags$style("#total{color: red;
-                                 font-size: 30px;
-                           font-face: bold;
-                           }")
-                
+      tabItem(tabName = "gp_max",
+              h3("The project maximums are set to a default of 5 members per group. You can modify these by directly writing into this table, just like Excel!"),
+              rHandsontableOutput("max", width = 300)
       ),
-      tags$head(tags$style("#total2{color: red;
-                                 font-size: 30px;
-                           font-face: bold;
-                           }")
-      )
+      tabItem(tabName = "res_mat",
+              h3("Solution (matrix)"),
+              DT::dataTableOutput("solution")),
+      tabItem(tabName = "res_gp",
+              h3("Solution (by groups)"),
+              tableOutput("GP_table"))
     )
   )
 )
 
-# Define server logic
+# Define server logic required to draw a histogram
 server <- function(input, output) {
-  library(knitr)
-  library(kableExtra)
-  library(tidyverse)
-  library(lpSolve)
   
+  # First menu item
   points <- reactive({
     inFile <- input$dataIN
     
     if (is.null(inFile)) {
       return(NULL)
     } else {
-      data <- read.csv(inFile$datapath, strip.white = T, stringsAsFactors = F)
+      data <- read.csv(inFile$datapath, strip.white = T, stringsAsFactors = F) %>% 
+        janitor::clean_names()
       return(data)
     }
   })
   
-  ## Content of first tab
-  
   output$prevIN <- DT::renderDataTable(DT::datatable(points(),
-                                                     options = list(pageLength = 100)))
+                                                     options = list(pageLength = 100,
+                                                                    scrollX=TRUE)))
   
-  ## Content of second tab
+  # Second menu item
   
   Btable <- reactive({
     req(input$dataIN)
@@ -98,7 +103,7 @@ server <- function(input, output) {
       hot_col("Project", readOnly = T)
   })
   
-  ## Content of third tab
+  ## Get results
   
   solution <- eventReactive(input$run, {
     fmat <- as.matrix(points()[-c(1,2)])
@@ -141,27 +146,30 @@ server <- function(input, output) {
     colnames(sol_out) <- colnames(points())
     
     sol_by_gp <- sol_out %>% 
-      mutate(Name = paste(First.Name, Last.Name)) %>% 
+      mutate(Name = paste(first_name, last_name)) %>% 
       select(Name, everything()) %>%
-      select(-c(First.Name, Last.Name)) %>% 
+      select(-c(first_name, last_name)) %>% 
       gather(Project, Value, -1) %>%
       filter(Value > 0) %>%
       select(Project, Name) %>% 
       arrange(Project)
-
+    
     return(list(sol_out = sol_out,
                 objval = solution$objval,
                 sol_by_gp = sol_by_gp))
   })
   
   ## Results for "results as matrix"
-  output$total <- renderText(paste("Optimum solution yields a value of", solution()$objval))
-
+  output$total <- renderValueBox({
+    req(input$dataIN)
+    valueBox(value = solution()$objval,
+             subtitle = "Optimal solution")
+  })
+  
   output$solution <- DT::renderDataTable(DT::datatable(data = solution()$sol_out,
                                                        options = list(pageLength = 100)))
   
   ## Results for "resutls by group"
-  output$total2 <- renderText(paste("Optimum solution yields a value of", solution()$objval))
   
   output$GP_table <- function() {
     solution()$sol_by_gp %>%
@@ -170,17 +178,27 @@ server <- function(input, output) {
       collapse_rows()
   }
   
-  
-  output$down <- downloadHandler(
+  ## Download button matrix
+  output$down_mat <- downloadHandler(
     filename = function() {
-      paste0("Solution", ".csv")
+      paste0("Solution_matrix", ".csv")
     },
     content = function(file) {
       write.csv(solution()$sol_out, file, row.names = F)
     }
   )
+  
+  ## Download button matrix
+  output$down_gp <- downloadHandler(
+    filename = function() {
+      paste0("Solution_by_GP", ".csv")
+    },
+    content = function(file) {
+      write.csv(solution()$sol_by_gp, file, row.names = F)
+    }
+  )
+  
 }
 
-# Run the app
+# Run the application 
 shinyApp(ui = ui, server = server)
-
