@@ -64,7 +64,8 @@ for (i in 1:(N-1)){ # from 1 to the length of students - 1 (84, in the case of t
 }
 
 #..........create matrix of 0s with dimensions N x N*k..........
-Aeq <- matrix(data = 0, nrow = N,ncol =  N*k)
+# these are the student points? (from JC discussion)
+Aeq <- matrix(data = 0, nrow = N, ncol =  N*k)
 
 #................not sure what's going on here tbh...............
 for (i in 1:N) {
